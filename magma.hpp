@@ -247,13 +247,79 @@ void encrypt_file(string input_file_path, string output_file_path, string key, b
     fout.close();
 }
 
-void decrypt_file(string input_file_path, string output_file_path, string key, bool with_chaining = true, bool display_round_blocks = false) {
+void decrypt_file_without_chaining(string input_file_path, string output_file_path, string key, bool with_chaining = false, bool display_round_blocks = false) {
     reverse_file_in_blocks(input_file_path, "./.rb.txt");
     encrypt_file("./.rb.txt", "./.cb.txt", key, with_chaining, display_round_blocks, decrypt_block);
     reverse_file_in_blocks("./.cb.txt", output_file_path);
 
     filesystem::remove("./.rb.txt");
     filesystem::remove("./.cb.txt");
+}
+
+void decrypt_file_with_chaining(string input_file_path, string output_file_path, string key, bool with_chaining = true, bool display_round_blocks = false) {
+    reverse_file_in_blocks(input_file_path, "./.rb.txt");
+
+    ifstream fin("./.rb.txt");
+    char input_buffer[16];
+    ofstream fout("./.cb.txt");
+    char output_buffer[16];
+
+    string last_decrypted_block = "";
+
+    while(!fin.eof()) {
+        string text_block = get_text_block(fin, input_buffer);
+
+        if (text_block.length() == 0) {
+            break;
+        } 
+
+        string hex_string_block = text_block;
+
+        if (HEX_INPUT == false) {
+            hex_string_block = convert_text_to_hex_string_block(text_block);
+        }
+
+        if (last_decrypted_block != "") {
+            string de_xored_block = xor_two_hex_block_strings(hex_string_block, last_decrypted_block);
+            for (unsigned short index = 0; index < de_xored_block.length(); index++) {
+                output_buffer[index] = de_xored_block[index];
+            }
+
+            fout.write(output_buffer, de_xored_block.length());
+        }
+
+        string decrypted_block = decrypt_block(hex_string_block, key, display_round_blocks);
+
+        string output = decrypted_block;
+
+        if (HEX_OUTPUT == false) {
+            output = convert_hex_string_block_to_text(output);
+        }
+
+        last_decrypted_block = output;
+    }
+
+    for (unsigned short index = 0; index < last_decrypted_block.length(); index++) {
+        output_buffer[index] = last_decrypted_block[index];
+    }
+
+    fout.write(output_buffer, last_decrypted_block.length());
+
+    fin.close();
+    fout.close();
+    
+    reverse_file_in_blocks("./.cb.txt", output_file_path);
+
+    filesystem::remove("./.rb.txt");
+    filesystem::remove("./.cb.txt");
+}
+
+void decrypt_file(string input_file_path, string output_file_path, string key, bool with_chaining = true, bool display_round_blocks = false) {
+    if (with_chaining == true) {
+        return decrypt_file_with_chaining(input_file_path, output_file_path, key, true, display_round_blocks);
+    } else {
+        return decrypt_file_without_chaining(input_file_path, output_file_path, key, false, display_round_blocks);
+    }
 }
 
 string read_key_from_file(string file_path) {
